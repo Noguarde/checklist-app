@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#4f46e5">
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css">
+  <title>Checklist</title>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Checklist</h1>
+      <label class="toggle-label">
+        <span>Show done</span>
+        <div class="toggle">
+          <input type="checkbox" id="showCompleted">
+          <span class="slider"></span>
+        </div>
+      </label>
+    </header>
+
+    <form id="addForm" class="add-form">
+      <textarea id="newItem" placeholder="New item…" rows="2" maxlength="300"></textarea>
+      <button type="submit">Add</button>
+    </form>
+
+    <ul id="itemList" class="item-list"></ul>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
