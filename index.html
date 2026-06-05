@@ -12,13 +12,16 @@
   <div class="app">
     <header>
       <h1>Checklist</h1>
-      <label class="toggle-label">
-        <span>Show done</span>
-        <div class="toggle">
-          <input type="checkbox" id="showCompleted">
-          <span class="slider"></span>
-        </div>
-      </label>
+      <div class="header-controls">
+        <button id="themeToggle" class="theme-btn" aria-label="Toggle dark mode">🌙</button>
+        <label class="toggle-label">
+          <span>Show done</span>
+          <div class="toggle">
+            <input type="checkbox" id="showCompleted">
+            <span class="slider"></span>
+          </div>
+        </label>
+      </div>
     </header>
 
     <form id="addForm" class="add-form">
