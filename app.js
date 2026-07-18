@@ -1,15 +1,27 @@
 const STORE_KEY = 'checklist_items';
 const THEME_KEY = 'checklist_theme';
+const TAB_KEY = 'checklist_tab';
 
-let items = JSON.parse(localStorage.getItem(STORE_KEY) || '[]').map(i => ({ children: [], ...i }));
+const CATEGORIES = [
+  { id: 'work', label: 'Work' },
+  { id: 'household', label: 'Household' },
+  { id: 'projects', label: 'Projects / To-Dos' },
+];
+
+let items = JSON.parse(localStorage.getItem(STORE_KEY) || '[]').map(i => ({ children: [], category: 'work', ...i }));
 let showCompleted = false;
 let addingChildTo = null;
+let activeTab = localStorage.getItem(TAB_KEY) || 'work';
+let focusIds = [];
 
 const list = document.getElementById('itemList');
 const form = document.getElementById('addForm');
 const textarea = document.getElementById('newItem');
 const showCompletedToggle = document.getElementById('showCompleted');
 const themeBtn = document.getElementById('themeToggle');
+const tabBtns = document.querySelectorAll('.tab-btn');
+const focusBtn = document.getElementById('focusBtn');
+const focusPanel = document.getElementById('focusPanel');
 
 // --- Theme ---
 function applyTheme(theme) {
@@ -138,11 +150,16 @@ function renderTopItem(item) {
   li.className = `item${item.done ? ' done' : ''}`;
   li.dataset.id = item.id;
 
+  const moveOptions = CATEGORIES.map(c =>
+    `<option value="${c.id}" ${c.id === item.category ? 'selected' : ''}>${c.label}</option>`
+  ).join('');
+
   const row = document.createElement('div');
   row.className = 'item-row';
   row.innerHTML = `
     <input type="checkbox" class="item-check" ${item.done ? 'checked' : ''} data-id="${item.id}" aria-label="Mark complete">
     <span class="item-text">${escapeHtml(item.text)}</span>
+    <select class="item-move" data-id="${item.id}" aria-label="Move to tab" title="Move to tab">${moveOptions}</select>
     <button class="item-edit-btn" data-id="${item.id}" aria-label="Edit">✏</button>
     <button class="item-add-child-btn" data-id="${item.id}" aria-label="Add sub-item" title="Add sub-item">+</button>
     <button class="item-delete" data-id="${item.id}" aria-label="Delete">&times;</button>
@@ -162,19 +179,97 @@ function renderTopItem(item) {
 }
 
 function render() {
-  const visible = showCompleted ? items : items.filter(i => !i.done);
+  const tabItems = items.filter(i => i.category === activeTab);
+  const visible = showCompleted ? tabItems : tabItems.filter(i => !i.done);
   list.innerHTML = '';
 
   if (visible.length === 0) {
-    list.innerHTML = `<p class="empty">${items.length === 0 ? 'No items yet.<br>Add one above.' : 'Nothing pending.<br>Toggle "Show done" to see completed items.'}</p>`;
+    list.innerHTML = `<p class="empty">${tabItems.length === 0 ? 'No items yet.<br>Add one above.' : 'Nothing pending.<br>Toggle "Show done" to see completed items.'}</p>`;
+  } else {
+    visible.forEach(item => list.appendChild(renderTopItem(item)));
+  }
+
+  renderFocusPanel();
+}
+
+// --- Tabs ---
+function setActiveTab(cat) {
+  activeTab = cat;
+  focusIds = [];
+  localStorage.setItem(TAB_KEY, cat);
+  tabBtns.forEach(btn => btn.classList.toggle('active', btn.dataset.cat === cat));
+  render();
+}
+
+tabBtns.forEach(btn => btn.addEventListener('click', () => setActiveTab(btn.dataset.cat)));
+
+// --- Focus randomizer ---
+function pickFocus() {
+  const pending = items.filter(i => i.category === activeTab && !i.done);
+  const pool = [...pending];
+  const picks = [];
+  while (pool.length && picks.length < 3) {
+    const idx = Math.floor(Math.random() * pool.length);
+    picks.push(pool.splice(idx, 1)[0]);
+  }
+  focusIds = picks.map(i => i.id);
+  renderFocusPanel();
+}
+
+function renderFocusPanel() {
+  if (focusIds.length === 0) {
+    focusPanel.classList.add('hidden');
+    focusPanel.innerHTML = '';
     return;
   }
 
-  visible.forEach(item => list.appendChild(renderTopItem(item)));
+  const focusItems = focusIds.map(id => findItem(id)).filter(Boolean);
+  if (focusItems.length === 0) {
+    focusIds = [];
+    focusPanel.classList.add('hidden');
+    focusPanel.innerHTML = '';
+    return;
+  }
+
+  focusPanel.classList.remove('hidden');
+  focusPanel.innerHTML = `
+    <div class="focus-header">
+      <span>🎯 Today's Focus</span>
+      <button class="focus-close" aria-label="Close">✕</button>
+    </div>
+    <ul class="focus-list">
+      ${focusItems.map(i => `
+        <li class="focus-item${i.done ? ' done' : ''}">
+          <input type="checkbox" class="focus-check" data-id="${i.id}" ${i.done ? 'checked' : ''} aria-label="Mark complete">
+          <span class="focus-text">${escapeHtml(i.text)}</span>
+        </li>
+      `).join('')}
+    </ul>
+    <button class="focus-reroll">🎲 Re-roll</button>
+  `;
 }
+
+focusBtn.addEventListener('click', pickFocus);
+
+focusPanel.addEventListener('click', e => {
+  if (e.target.closest('.focus-close')) { focusIds = []; renderFocusPanel(); return; }
+  if (e.target.closest('.focus-reroll')) { pickFocus(); return; }
+});
+
+focusPanel.addEventListener('change', e => {
+  if (!e.target.classList.contains('focus-check')) return;
+  const target = findItem(e.target.dataset.id);
+  if (target) { target.done = e.target.checked; save(); render(); }
+});
 
 // --- Events ---
 list.addEventListener('change', e => {
+  if (e.target.classList.contains('item-move')) {
+    const item = findItem(e.target.dataset.id);
+    if (item) { item.category = e.target.value; save(); render(); }
+    return;
+  }
+
   if (!e.target.classList.contains('item-check')) return;
   const { id, parent } = e.target.dataset;
   const target = parent ? findChild(parent, id) : findItem(id);
@@ -216,7 +311,7 @@ form.addEventListener('submit', e => {
   e.preventDefault();
   const text = textarea.value.trim();
   if (!text) return;
-  items.unshift({ id: Date.now().toString(), text, done: false, children: [] });
+  items.unshift({ id: Date.now().toString(), text, done: false, children: [], category: activeTab });
   save(); render();
   textarea.value = '';
   textarea.focus();
@@ -231,6 +326,6 @@ textarea.addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.dispatchEvent(new Event('submit')); }
 });
 
-render();
+setActiveTab(activeTab);
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
